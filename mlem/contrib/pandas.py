@@ -4,6 +4,7 @@ Extension type: data
 DataType, Reader and Writer implementations for `pd.DataFrame` and `pd.Series`
 ImportHook implementation for files saved with pandas
 """
+
 import logging
 import os.path
 import posixpath
@@ -26,14 +27,8 @@ from typing import (
 
 import numpy as np
 import pandas as pd
-from pandas import Int64Dtype, SparseDtype, StringDtype
-from pandas.core.dtypes.dtypes import (
-    CategoricalDtype,
-    DatetimeTZDtype,
-    IntervalDtype,
-    PandasExtensionDtype,
-    PeriodDtype,
-)
+import pandas.api.types
+from pandas.core.dtypes.dtypes import PandasExtensionDtype
 from pydantic import BaseModel, create_model, validator
 
 from mlem.config import MlemConfigBase, project_config
@@ -58,20 +53,6 @@ from mlem.core.meta_io import Location
 from mlem.core.objects import MlemData
 from mlem.core.requirements import LibRequirementsMixin
 
-_PD_EXT_TYPES = {
-    DatetimeTZDtype: r"datetime64.*",
-    CategoricalDtype: r"category",
-    PeriodDtype: r"[pP]eriod.*",
-    SparseDtype: r"Sparse.*",
-    IntervalDtype: r"[iI]nterval.*",
-    Int64Dtype: r"U?Int\d*",
-    StringDtype: r"string",
-}
-PD_EXT_TYPES = {
-    dtype: re.compile(pattern) for dtype, pattern in _PD_EXT_TYPES.items()
-}
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -86,11 +67,11 @@ def pd_type_from_string(string_repr):
     """Creates pandas dtype from string representation"""
     try:
         return np_type_from_string(string_repr)
-    except ValueError as e:
-        for dtype, pattern in PD_EXT_TYPES.items():
-            if pattern.match(string_repr) is not None:
-                return dtype.construct_from_string(string_repr)
-        raise ValueError(f"unknown pandas dtype {string_repr}") from e
+    except ValueError:
+        try:
+            return pandas.api.types.pandas_dtype(string_repr)
+        except TypeError as e:
+            raise ValueError(f"unknown pandas dtype {string_repr}") from e
 
 
 def python_type_from_pd_type(pd_type: Union[np.dtype, Type]):
